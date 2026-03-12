@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -20,7 +20,8 @@ import {
   Briefcase,
   ExternalLink,
   Upload,
-  X
+  X,
+  CheckCircle2
 } from "lucide-react"
 import {
   Dialog,
@@ -31,68 +32,21 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 
-const jobs = [
-  {
-    id: 1,
-    title: "Senior Frontend Developer",
-    company: "TechCorp Inc.",
-    location: "San Francisco, CA",
-    type: "Full-time",
-    salary: "$120k - $160k",
-    posted: "2 days ago",
-    description: "We're looking for an experienced Frontend Developer to join our team...",
-    skills: ["React", "TypeScript", "Next.js", "Tailwind CSS"],
-    remote: true,
-  },
-  {
-    id: 2,
-    title: "Product Designer",
-    company: "DesignHub",
-    location: "New York, NY",
-    type: "Full-time",
-    salary: "$100k - $130k",
-    posted: "1 week ago",
-    description: "Join our design team to create beautiful user experiences...",
-    skills: ["Figma", "UI/UX", "Design Systems", "Prototyping"],
-    remote: true,
-  },
-  {
-    id: 3,
-    title: "Data Scientist",
-    company: "AI Solutions",
-    location: "Austin, TX",
-    type: "Full-time",
-    salary: "$130k - $170k",
-    posted: "3 days ago",
-    description: "Help us build the next generation of AI-powered products...",
-    skills: ["Python", "Machine Learning", "TensorFlow", "SQL"],
-    remote: false,
-  },
-  {
-    id: 4,
-    title: "Backend Engineer",
-    company: "CloudTech",
-    location: "Seattle, WA",
-    type: "Contract",
-    salary: "$140k - $180k",
-    posted: "5 days ago",
-    description: "Build scalable backend systems for our cloud platform...",
-    skills: ["Node.js", "PostgreSQL", "AWS", "Docker"],
-    remote: true,
-  },
-  {
-    id: 5,
-    title: "Marketing Manager",
-    company: "GrowthCo",
-    location: "Los Angeles, CA",
-    type: "Full-time",
-    salary: "$90k - $120k",
-    posted: "1 day ago",
-    description: "Lead our marketing initiatives and drive growth...",
-    skills: ["SEO", "Content Marketing", "Analytics", "Social Media"],
-    remote: false,
-  },
-]
+interface Job {
+  id: number
+  title: string
+  company: string
+  department: string
+  location: string
+  type: string
+  salary: string
+  posted: string
+  description: string
+  skills: string[]
+  remote: boolean
+  vacancies: number
+  status: "active" | "paused" | "closed"
+}
 
 interface ApplicationFormData {
   fullName: string
@@ -104,12 +58,27 @@ interface ApplicationFormData {
   resumeFile: File | null
 }
 
+// Helper function to format date
+function formatPostedDate(dateString: string): string {
+  const posted = new Date(dateString)
+  const now = new Date()
+  const diffTime = Math.abs(now.getTime() - posted.getTime())
+  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24))
+  
+  if (diffDays === 0) return "Today"
+  if (diffDays === 1) return "1 day ago"
+  if (diffDays < 7) return `${diffDays} days ago`
+  if (diffDays < 14) return "1 week ago"
+  return `${Math.floor(diffDays / 7)} weeks ago`
+}
+
 export function JobsSection() {
+  const [jobs, setJobs] = useState<Job[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [savedJobs, setSavedJobs] = useState<number[]>([])
   const [appliedJobs, setAppliedJobs] = useState<number[]>([])
   const [applyDialogOpen, setApplyDialogOpen] = useState(false)
-  const [selectedJob, setSelectedJob] = useState<typeof jobs[0] | null>(null)
+  const [selectedJob, setSelectedJob] = useState<Job | null>(null)
   const [formData, setFormData] = useState<ApplicationFormData>({
     fullName: "",
     email: "",
@@ -119,10 +88,69 @@ export function JobsSection() {
     coverLetter: "",
     resumeFile: null,
   })
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  // Load jobs from localStorage (posted by HR)
+  useEffect(() => {
+    const loadJobs = () => {
+      const storedJobs = localStorage.getItem("hireai_jobs")
+      if (storedJobs) {
+        const parsedJobs = JSON.parse(storedJobs)
+        // Transform HR-posted jobs to candidate job format, only show active jobs
+        const candidateJobs: Job[] = parsedJobs
+          .filter((job: { status: string }) => job.status === "active")
+          .map((job: {
+            id: number
+            title: string
+            department: string
+            location: string
+            type: string
+            salary: string
+            description: string
+            skills: string[]
+            isRemote: boolean
+            vacancies: number
+            postedAt: string
+            status: "active" | "paused" | "closed"
+          }) => ({
+            id: job.id,
+            title: job.title,
+            company: "HireAI Corp", // Default company name
+            department: job.department,
+            location: job.location,
+            type: job.type,
+            salary: job.salary,
+            posted: formatPostedDate(job.postedAt),
+            description: job.description,
+            skills: job.skills,
+            remote: job.isRemote,
+            vacancies: job.vacancies,
+            status: job.status
+          }))
+        setJobs(candidateJobs)
+      }
+    }
+
+    loadJobs()
+    // Listen for storage changes from HR dashboard
+    window.addEventListener("storage", loadJobs)
+    return () => window.removeEventListener("storage", loadJobs)
+  }, [])
+
+  // Load applied jobs from localStorage
+  useEffect(() => {
+    const storedApplications = localStorage.getItem("hireai_applications")
+    if (storedApplications) {
+      const applications = JSON.parse(storedApplications)
+      const appliedJobIds = applications.map((app: { jobId: number }) => app.jobId)
+      setAppliedJobs(appliedJobIds)
+    }
+  }, [])
 
   const filteredJobs = jobs.filter(job => 
     job.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
     job.company.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    job.department.toLowerCase().includes(searchQuery.toLowerCase()) ||
     job.skills.some(skill => skill.toLowerCase().includes(searchQuery.toLowerCase()))
   )
 
@@ -145,11 +173,55 @@ export function JobsSection() {
     }
   }
 
-  const handleSubmitApplication = (e: React.FormEvent) => {
+  const handleSubmitApplication = async (e: React.FormEvent) => {
     e.preventDefault()
     if (selectedJob) {
+      setIsSubmitting(true)
+      
+      // Get candidate info from session storage
+      const candidateName = sessionStorage.getItem("userName") || formData.fullName
+      const candidateEmail = sessionStorage.getItem("userEmail") || formData.email
+      
+      // Create application object
+      const application = {
+        id: Date.now(),
+        jobId: selectedJob.id,
+        jobTitle: selectedJob.title,
+        candidateName: candidateName,
+        candidateEmail: candidateEmail,
+        phone: formData.phone,
+        skills: formData.skills.split(",").map(s => s.trim()).filter(s => s),
+        experience: formData.experience,
+        coverLetter: formData.coverLetter,
+        appliedAt: new Date().toISOString().split('T')[0],
+        status: "new" as const,
+        resumeFileName: formData.resumeFile?.name || null
+      }
+      
+      // Save to localStorage
+      const existingApplications = localStorage.getItem("hireai_applications")
+      const applications = existingApplications ? JSON.parse(existingApplications) : []
+      applications.push(application)
+      localStorage.setItem("hireai_applications", JSON.stringify(applications))
+      
+      // Update job's applicant count in jobs storage
+      const storedJobs = localStorage.getItem("hireai_jobs")
+      if (storedJobs) {
+        const parsedJobs = JSON.parse(storedJobs)
+        const updatedJobs = parsedJobs.map((job: { id: number; applicants: number }) => 
+          job.id === selectedJob.id 
+            ? { ...job, applicants: (job.applicants || 0) + 1 }
+            : job
+        )
+        localStorage.setItem("hireai_jobs", JSON.stringify(updatedJobs))
+      }
+      
+      // Simulate API delay
+      await new Promise(resolve => setTimeout(resolve, 1000))
+      
       setAppliedJobs(prev => [...prev, selectedJob.id])
       setApplyDialogOpen(false)
+      setIsSubmitting(false)
       setFormData({
         fullName: "",
         email: "",
@@ -378,9 +450,16 @@ export function JobsSection() {
               <Button
                 type="submit"
                 className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90"
+                disabled={isSubmitting}
               >
-                <Send className="h-4 w-4 mr-2" />
-                Submit Application
+                {isSubmitting ? (
+                  <div className="h-5 w-5 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
+                ) : (
+                  <>
+                    <Send className="h-4 w-4 mr-2" />
+                    Submit Application
+                  </>
+                )}
               </Button>
             </div>
           </form>
@@ -508,7 +587,10 @@ export function JobsSection() {
                         </div>
                         <div className="flex gap-3 pt-4">
                           <Button 
-                            className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90"
+                            className={appliedJobs.includes(job.id) 
+                              ? "flex-1 bg-chart-2/10 text-chart-2 hover:bg-chart-2/20" 
+                              : "flex-1 bg-primary text-primary-foreground hover:bg-primary/90"
+                            }
                             onClick={() => {
                               if (!appliedJobs.includes(job.id)) {
                                 openApplyDialog(job)
@@ -516,7 +598,12 @@ export function JobsSection() {
                             }}
                             disabled={appliedJobs.includes(job.id)}
                           >
-                            {appliedJobs.includes(job.id) ? "Applied" : "Apply Now"}
+                            {appliedJobs.includes(job.id) ? (
+                              <>
+                                <CheckCircle2 className="h-4 w-4 mr-2" />
+                                Applied
+                              </>
+                            ) : "Apply Now"}
                           </Button>
                           <Button
                             variant="outline"
@@ -535,12 +622,20 @@ export function JobsSection() {
                   </Dialog>
 
                   <Button 
-                    className="bg-primary text-primary-foreground hover:bg-primary/90"
+                    className={appliedJobs.includes(job.id) 
+                      ? "bg-chart-2/10 text-chart-2 hover:bg-chart-2/20" 
+                      : "bg-primary text-primary-foreground hover:bg-primary/90"
+                    }
                     size="sm"
-                    onClick={() => openApplyDialog(job)}
+                    onClick={() => !appliedJobs.includes(job.id) && openApplyDialog(job)}
                     disabled={appliedJobs.includes(job.id)}
                   >
-                    {appliedJobs.includes(job.id) ? "Applied" : "Quick Apply"}
+                    {appliedJobs.includes(job.id) ? (
+                      <>
+                        <CheckCircle2 className="h-4 w-4 mr-1" />
+                        Applied
+                      </>
+                    ) : "Quick Apply"}
                   </Button>
                 </div>
               </div>
@@ -549,12 +644,22 @@ export function JobsSection() {
         ))}
       </div>
 
-      {filteredJobs.length === 0 && (
+      {filteredJobs.length === 0 && jobs.length > 0 && (
         <Card className="bg-card border-border">
           <CardContent className="p-12 text-center">
             <Briefcase className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
             <h3 className="text-lg font-semibold text-foreground">No jobs found</h3>
             <p className="text-muted-foreground mt-1">Try adjusting your search criteria</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {jobs.length === 0 && (
+        <Card className="bg-card border-border">
+          <CardContent className="p-12 text-center">
+            <Briefcase className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-foreground">No jobs available yet</h3>
+            <p className="text-muted-foreground mt-1">Check back later for new job postings from HR</p>
           </CardContent>
         </Card>
       )}

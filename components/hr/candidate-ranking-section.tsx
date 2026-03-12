@@ -53,208 +53,103 @@ interface Candidate {
   resumeMatch: number
   skillsMatch: number
   experienceMatch: number
+  coverLetter?: string
 }
 
 interface Job {
   id: string
   title: string
   vacancies: number
+  skills: string[]
+  description: string
 }
 
-const defaultJobs: Job[] = [
-  { id: "1", title: "Senior Frontend Developer", vacancies: 2 },
-  { id: "2", title: "Product Designer", vacancies: 3 },
-  { id: "3", title: "Marketing Manager", vacancies: 1 },
-  { id: "4", title: "Data Scientist", vacancies: 2 },
-]
-
-const allCandidates: Candidate[] = [
-  {
-    id: 1,
-    name: "Emily Chen",
-    email: "emily.chen@email.com",
-    phone: "+1 (555) 123-4567",
-    position: "Senior Frontend Developer",
-    jobId: "1",
-    aiScore: 95,
-    experience: "6 years",
-    skills: ["React", "TypeScript", "Next.js", "Node.js", "GraphQL"],
-    appliedAt: "2024-01-15",
-    status: "shortlisted",
-    resumeMatch: 98,
-    skillsMatch: 94,
-    experienceMatch: 92,
-  },
-  {
-    id: 2,
-    name: "Marcus Johnson",
-    email: "marcus.j@email.com",
-    phone: "+1 (555) 234-5678",
-    position: "Senior Frontend Developer",
-    jobId: "1",
-    aiScore: 88,
-    experience: "5 years",
-    skills: ["React", "JavaScript", "Vue.js", "CSS", "REST APIs"],
-    appliedAt: "2024-01-14",
-    status: "interviewed",
-    resumeMatch: 85,
-    skillsMatch: 90,
-    experienceMatch: 88,
-  },
-  {
-    id: 3,
-    name: "Sarah Williams",
-    email: "sarah.w@email.com",
-    phone: "+1 (555) 345-6789",
-    position: "Senior Frontend Developer",
-    jobId: "1",
-    aiScore: 82,
-    experience: "4 years",
-    skills: ["React", "TypeScript", "Angular", "SCSS", "Jest"],
-    appliedAt: "2024-01-13",
-    status: "reviewing",
-    resumeMatch: 80,
-    skillsMatch: 85,
-    experienceMatch: 78,
-  },
-  {
-    id: 4,
-    name: "David Kim",
-    email: "david.kim@email.com",
-    phone: "+1 (555) 456-7890",
-    position: "Senior Frontend Developer",
-    jobId: "1",
-    aiScore: 78,
-    experience: "3 years",
-    skills: ["React", "JavaScript", "HTML/CSS", "Redux", "Webpack"],
-    appliedAt: "2024-01-12",
-    status: "new",
-    resumeMatch: 75,
-    skillsMatch: 80,
-    experienceMatch: 76,
-  },
-  {
-    id: 5,
-    name: "Jessica Martinez",
-    email: "jessica.m@email.com",
-    phone: "+1 (555) 567-8901",
-    position: "Senior Frontend Developer",
-    jobId: "1",
-    aiScore: 72,
-    experience: "4 years",
-    skills: ["Vue.js", "JavaScript", "Nuxt.js", "Tailwind CSS", "Git"],
-    appliedAt: "2024-01-11",
-    status: "new",
-    resumeMatch: 68,
-    skillsMatch: 75,
-    experienceMatch: 72,
-  },
-  {
-    id: 6,
-    name: "Alex Thompson",
-    email: "alex.t@email.com",
-    phone: "+1 (555) 678-9012",
-    position: "Product Designer",
-    jobId: "2",
-    aiScore: 91,
-    experience: "5 years",
-    skills: ["Figma", "UI/UX", "Adobe XD", "Prototyping", "User Research"],
-    appliedAt: "2024-01-15",
-    status: "shortlisted",
-    resumeMatch: 92,
-    skillsMatch: 90,
-    experienceMatch: 91,
-  },
-  {
-    id: 7,
-    name: "Rachel Green",
-    email: "rachel.g@email.com",
-    phone: "+1 (555) 789-0123",
-    position: "Product Designer",
-    jobId: "2",
-    aiScore: 85,
-    experience: "4 years",
-    skills: ["Figma", "Sketch", "Design Systems", "CSS", "Motion Design"],
-    appliedAt: "2024-01-14",
-    status: "reviewing",
-    resumeMatch: 84,
-    skillsMatch: 86,
-    experienceMatch: 85,
-  },
-  {
-    id: 8,
-    name: "Michael Brown",
-    email: "michael.b@email.com",
-    phone: "+1 (555) 890-1234",
-    position: "Marketing Manager",
-    jobId: "3",
-    aiScore: 89,
-    experience: "7 years",
-    skills: ["SEO", "Content Strategy", "Analytics", "Social Media", "PPC"],
-    appliedAt: "2024-01-15",
-    status: "interviewed",
-    resumeMatch: 90,
-    skillsMatch: 88,
-    experienceMatch: 89,
-  },
-  {
-    id: 9,
-    name: "Lisa Wang",
-    email: "lisa.w@email.com",
-    phone: "+1 (555) 901-2345",
-    position: "Data Scientist",
-    jobId: "4",
-    aiScore: 93,
-    experience: "5 years",
-    skills: ["Python", "Machine Learning", "TensorFlow", "SQL", "Statistics"],
-    appliedAt: "2024-01-15",
-    status: "shortlisted",
-    resumeMatch: 94,
-    skillsMatch: 92,
-    experienceMatch: 93,
-  },
-  {
-    id: 10,
-    name: "James Wilson",
-    email: "james.w@email.com",
-    phone: "+1 (555) 012-3456",
-    position: "Data Scientist",
-    jobId: "4",
-    aiScore: 86,
-    experience: "4 years",
-    skills: ["Python", "R", "Deep Learning", "NLP", "Data Visualization"],
-    appliedAt: "2024-01-14",
-    status: "reviewing",
-    resumeMatch: 85,
-    skillsMatch: 87,
-    experienceMatch: 86,
-  },
-]
+interface StoredApplication {
+  id: number
+  jobId: number
+  jobTitle: string
+  candidateName: string
+  candidateEmail: string
+  phone: string
+  skills: string[]
+  experience: string
+  coverLetter: string
+  appliedAt: string
+  status: "new" | "reviewing" | "interviewed" | "shortlisted" | "rejected"
+  resumeFileName: string | null
+}
 
 export function CandidateRankingSection() {
   const [selectedJob, setSelectedJob] = useState<string>("")
   const [sortOrder, setSortOrder] = useState<"desc" | "asc">("desc")
   const [showRanking, setShowRanking] = useState(false)
-  const [jobs, setJobs] = useState<Job[]>(defaultJobs)
+  const [jobs, setJobs] = useState<Job[]>([])
+  const [candidates, setCandidates] = useState<Candidate[]>([])
+  const [isRanking, setIsRanking] = useState(false)
 
-  // Load jobs from localStorage (includes vacancies from posted jobs)
+  // Load jobs from localStorage
   useEffect(() => {
-    const storedJobs = localStorage.getItem("hireai_jobs")
-    if (storedJobs) {
-      const parsedJobs = JSON.parse(storedJobs)
-      // Convert posted jobs to ranking format
-      const formattedJobs: Job[] = parsedJobs.map((job: { id: number; title: string; vacancies: number }) => ({
-        id: job.id.toString(),
-        title: job.title,
-        vacancies: job.vacancies || 1
-      }))
-      setJobs(formattedJobs)
+    const loadJobs = () => {
+      const storedJobs = localStorage.getItem("hireai_jobs")
+      if (storedJobs) {
+        const parsedJobs = JSON.parse(storedJobs)
+        const formattedJobs: Job[] = parsedJobs.map((job: { 
+          id: number
+          title: string
+          vacancies: number
+          skills: string[]
+          description: string 
+        }) => ({
+          id: job.id.toString(),
+          title: job.title,
+          vacancies: job.vacancies || 1,
+          skills: job.skills || [],
+          description: job.description || ""
+        }))
+        setJobs(formattedJobs)
+      }
     }
+    
+    loadJobs()
+    window.addEventListener("storage", loadJobs)
+    return () => window.removeEventListener("storage", loadJobs)
+  }, [])
+
+  // Load applications from localStorage and convert to candidates
+  useEffect(() => {
+    const loadApplications = () => {
+      const storedApplications = localStorage.getItem("hireai_applications")
+      if (storedApplications) {
+        const applications: StoredApplication[] = JSON.parse(storedApplications)
+        const candidatesFromApps: Candidate[] = applications.map(app => ({
+          id: app.id,
+          name: app.candidateName,
+          email: app.candidateEmail,
+          phone: app.phone,
+          position: app.jobTitle,
+          jobId: app.jobId.toString(),
+          aiScore: 0, // Will be calculated by AI ranking
+          experience: app.experience,
+          skills: app.skills,
+          appliedAt: app.appliedAt,
+          status: app.status,
+          resumeMatch: 0,
+          skillsMatch: 0,
+          experienceMatch: 0,
+          coverLetter: app.coverLetter
+        }))
+        setCandidates(candidatesFromApps)
+      }
+    }
+    
+    loadApplications()
+    window.addEventListener("storage", loadApplications)
+    return () => window.removeEventListener("storage", loadApplications)
   }, [])
 
   const selectedJobData = jobs.find(job => job.id === selectedJob)
   
-  const filteredCandidates = allCandidates.filter(
+  const filteredCandidates = candidates.filter(
     candidate => candidate.jobId === selectedJob
   )
 
@@ -271,10 +166,105 @@ export function CandidateRankingSection() {
     ? Math.round(filteredCandidates.reduce((sum, c) => sum + c.aiScore, 0) / filteredCandidates.length)
     : 0
 
-  const handleViewRanking = () => {
-    if (selectedJob) {
+  // AI Ranking function - calls the ranking API
+  const handleViewRanking = async () => {
+    if (selectedJob && selectedJobData) {
+      setIsRanking(true)
+      
+      // Get candidates for this job
+      const jobCandidates = candidates.filter(c => c.jobId === selectedJob)
+      
+      if (jobCandidates.length === 0) {
+        setShowRanking(true)
+        setIsRanking(false)
+        return
+      }
+      
+      try {
+        // Call AI ranking API
+        const response = await fetch("/api/rank-candidates", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            jobId: selectedJob,
+            jobTitle: selectedJobData.title,
+            jobDescription: selectedJobData.description,
+            jobSkills: selectedJobData.skills,
+            candidates: jobCandidates.map(c => ({
+              id: c.id,
+              name: c.name,
+              skills: c.skills,
+              experience: c.experience,
+              coverLetter: c.coverLetter
+            }))
+          })
+        })
+        
+        if (response.ok) {
+          const rankedData = await response.json()
+          
+          // Update candidates with AI scores
+          const updatedCandidates = candidates.map(c => {
+            const ranking = rankedData.rankings.find((r: { id: number }) => r.id === c.id)
+            if (ranking) {
+              return {
+                ...c,
+                aiScore: ranking.aiScore,
+                resumeMatch: ranking.resumeMatch,
+                skillsMatch: ranking.skillsMatch,
+                experienceMatch: ranking.experienceMatch
+              }
+            }
+            return c
+          })
+          
+          setCandidates(updatedCandidates)
+        }
+      } catch (error) {
+        console.log("[v0] Error calling ranking API:", error)
+        // Generate mock scores if API fails
+        const updatedCandidates = candidates.map(c => {
+          if (c.jobId === selectedJob) {
+            const skillsMatch = calculateSkillsMatch(c.skills, selectedJobData.skills)
+            const experienceMatch = calculateExperienceScore(c.experience)
+            const resumeMatch = Math.round((skillsMatch + experienceMatch) / 2)
+            const aiScore = Math.round((skillsMatch * 0.4 + experienceMatch * 0.3 + resumeMatch * 0.3))
+            
+            return {
+              ...c,
+              aiScore,
+              resumeMatch,
+              skillsMatch,
+              experienceMatch
+            }
+          }
+          return c
+        })
+        setCandidates(updatedCandidates)
+      }
+      
       setShowRanking(true)
+      setIsRanking(false)
     }
+  }
+  
+  // Calculate skills match score
+  const calculateSkillsMatch = (candidateSkills: string[], jobSkills: string[]): number => {
+    if (jobSkills.length === 0) return 70
+    const matchedSkills = candidateSkills.filter(skill => 
+      jobSkills.some(js => js.toLowerCase().includes(skill.toLowerCase()) || 
+                         skill.toLowerCase().includes(js.toLowerCase()))
+    )
+    return Math.min(100, Math.round((matchedSkills.length / jobSkills.length) * 100 + 20))
+  }
+  
+  // Calculate experience score
+  const calculateExperienceScore = (experience: string): number => {
+    const years = parseInt(experience) || 1
+    if (years >= 5) return 95
+    if (years >= 3) return 85
+    if (years >= 2) return 75
+    return 65
   }
 
   const getStatusBadge = (status: string) => {
@@ -337,11 +327,20 @@ export function CandidateRankingSection() {
             </div>
             <Button 
               onClick={handleViewRanking}
-              disabled={!selectedJob}
+              disabled={!selectedJob || isRanking}
               className="bg-primary text-primary-foreground hover:bg-primary/90"
             >
-              <Sparkles className="h-4 w-4 mr-2" />
-              View AI Ranking
+              {isRanking ? (
+                <>
+                  <div className="h-4 w-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin mr-2" />
+                  Ranking...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  View AI Ranking
+                </>
+              )}
             </Button>
           </div>
         </CardContent>
