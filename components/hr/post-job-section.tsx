@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -35,93 +35,19 @@ import {
   DollarSign,
   Calendar
 } from "lucide-react"
-
-interface PostedJob {
-  id: number
-  title: string
-  department: string
-  location: string
-  salary: string
-  type: string
-  description: string
-  applicants: number
-  status: "active" | "paused" | "closed"
-  postedAt: string
-  isRemote: boolean
-  skills: string[]
-  vacancies: number
-}
-
-const initialJobs: PostedJob[] = [
-  {
-    id: 1,
-    title: "Senior Frontend Developer",
-    department: "Engineering",
-    location: "San Francisco, CA",
-    salary: "$120k - $160k",
-    type: "Full-time",
-    description: "We are looking for a skilled frontend developer to join our team.",
-    applicants: 45,
-    status: "active",
-    postedAt: "2024-01-15",
-    isRemote: true,
-    skills: ["React", "TypeScript", "Next.js"],
-    vacancies: 2,
-  },
-  {
-    id: 2,
-    title: "Product Designer",
-    department: "Design",
-    location: "New York, NY",
-    salary: "$100k - $140k",
-    type: "Full-time",
-    description: "Join our design team to create amazing user experiences.",
-    applicants: 32,
-    status: "active",
-    postedAt: "2024-01-14",
-    isRemote: false,
-    skills: ["Figma", "UI/UX", "Prototyping"],
-    vacancies: 3,
-  },
-  {
-    id: 3,
-    title: "Marketing Manager",
-    department: "Marketing",
-    location: "Austin, TX",
-    salary: "$90k - $120k",
-    type: "Full-time",
-    description: "Lead our marketing initiatives and grow our brand.",
-    applicants: 28,
-    status: "paused",
-    postedAt: "2024-01-10",
-    isRemote: true,
-    skills: ["SEO", "Content Strategy", "Analytics"],
-    vacancies: 1,
-  },
-  {
-    id: 4,
-    title: "Data Scientist",
-    department: "Engineering",
-    location: "Remote",
-    salary: "$130k - $170k",
-    type: "Full-time",
-    description: "Analyze data and build machine learning models.",
-    applicants: 38,
-    status: "active",
-    postedAt: "2024-01-12",
-    isRemote: true,
-    skills: ["Python", "Machine Learning", "SQL"],
-    vacancies: 2,
-  },
-]
+import { 
+  getJobs, 
+  addJob, 
+  type Job 
+} from "@/lib/store"
 
 export function PostJobSection() {
-  const [postedJobs, setPostedJobs] = useState<PostedJob[]>(initialJobs)
+  const [postedJobs, setPostedJobs] = useState<Job[]>([])
   const [skills, setSkills] = useState<string[]>([])
   const [newSkill, setNewSkill] = useState("")
   const [isRemote, setIsRemote] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [selectedJob, setSelectedJob] = useState<PostedJob | null>(null)
+  const [selectedJob, setSelectedJob] = useState<Job | null>(null)
   const [isDetailsOpen, setIsDetailsOpen] = useState(false)
   
   // Form state
@@ -133,24 +59,28 @@ export function PostJobSection() {
     salary: "",
     description: "",
     vacancies: "1",
+    company: "Your Company",
   })
 
-  // Load jobs from localStorage on mount
-  useEffect(() => {
-    const storedJobs = localStorage.getItem("hireai_jobs")
-    if (storedJobs) {
-      setPostedJobs(JSON.parse(storedJobs))
-    } else {
-      // Save initial jobs to localStorage
-      localStorage.setItem("hireai_jobs", JSON.stringify(initialJobs))
-    }
+  // Load jobs from store
+  const loadJobs = useCallback(() => {
+    const jobs = getJobs()
+    setPostedJobs(jobs)
   }, [])
 
-  // Save jobs to localStorage whenever they change
-  const saveJobs = (jobs: PostedJob[]) => {
-    setPostedJobs(jobs)
-    localStorage.setItem("hireai_jobs", JSON.stringify(jobs))
-  }
+  useEffect(() => {
+    loadJobs()
+
+    // Listen for job updates
+    const handleJobsUpdated = () => loadJobs()
+    window.addEventListener("jobs-updated", handleJobsUpdated)
+    window.addEventListener("applications-updated", handleJobsUpdated)
+    
+    return () => {
+      window.removeEventListener("jobs-updated", handleJobsUpdated)
+      window.removeEventListener("applications-updated", handleJobsUpdated)
+    }
+  }, [loadJobs])
 
   const addSkill = () => {
     if (newSkill.trim() && !skills.includes(newSkill.trim())) {
@@ -168,26 +98,25 @@ export function PostJobSection() {
     setIsSubmitting(true)
     
     // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1500))
+    await new Promise(resolve => setTimeout(resolve, 500))
     
-    const newJob: PostedJob = {
-      id: Date.now(),
+    // Add job to shared store
+    addJob({
       title: formData.title,
       department: formData.department,
       location: formData.location,
       salary: formData.salary,
       type: formData.type,
       description: formData.description,
-      applicants: 0,
       status: "active",
-      postedAt: new Date().toISOString().split('T')[0],
       isRemote: isRemote,
       skills: skills,
       vacancies: parseInt(formData.vacancies) || 1,
-    }
+      company: formData.company || "Your Company",
+    })
     
-    const updatedJobs = [newJob, ...postedJobs]
-    saveJobs(updatedJobs)
+    // Reload jobs from store
+    loadJobs()
     
     setSkills([])
     setIsRemote(false)
@@ -200,6 +129,7 @@ export function PostJobSection() {
       salary: "",
       description: "",
       vacancies: "1",
+      company: "Your Company",
     })
   }
 

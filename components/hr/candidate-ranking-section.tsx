@@ -181,21 +181,33 @@ export function CandidateRankingSection() {
       }
       
       try {
-        // Call AI ranking API
+        // Get the full job data from localStorage
+        const storedJobs = localStorage.getItem("hireai_jobs")
+        const fullJobData = storedJobs 
+          ? JSON.parse(storedJobs).find((j: { id: number }) => j.id.toString() === selectedJob)
+          : null
+        
+        // Call AI ranking API with the expected format
         const response = await fetch("/api/rank-candidates", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            jobId: selectedJob,
-            jobTitle: selectedJobData.title,
-            jobDescription: selectedJobData.description,
-            jobSkills: selectedJobData.skills,
-            candidates: jobCandidates.map(c => ({
+            job: fullJobData || {
+              title: selectedJobData.title,
+              department: "",
+              location: "",
+              type: "Full-time",
+              isRemote: false,
+              skills: selectedJobData.skills,
+              description: selectedJobData.description,
+              vacancies: selectedJobData.vacancies
+            },
+            applications: jobCandidates.map(c => ({
               id: c.id,
-              name: c.name,
-              skills: c.skills,
+              candidateName: c.name,
               experience: c.experience,
-              coverLetter: c.coverLetter
+              skills: c.skills,
+              coverLetter: c.coverLetter || ""
             }))
           })
         })
@@ -205,7 +217,7 @@ export function CandidateRankingSection() {
           
           // Update candidates with AI scores
           const updatedCandidates = candidates.map(c => {
-            const ranking = rankedData.rankings.find((r: { id: number }) => r.id === c.id)
+            const ranking = rankedData.rankings?.find((r: { candidateId: number }) => r.candidateId === c.id)
             if (ranking) {
               return {
                 ...c,
@@ -219,6 +231,9 @@ export function CandidateRankingSection() {
           })
           
           setCandidates(updatedCandidates)
+        } else {
+          // If API fails, use fallback scoring
+          throw new Error("API request failed")
         }
       } catch (error) {
         console.log("[v0] Error calling ranking API:", error)

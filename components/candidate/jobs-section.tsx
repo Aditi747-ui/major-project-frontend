@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -31,22 +31,13 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-
-interface Job {
-  id: number
-  title: string
-  company: string
-  department: string
-  location: string
-  type: string
-  salary: string
-  posted: string
-  description: string
-  skills: string[]
-  remote: boolean
-  vacancies: number
-  status: "active" | "paused" | "closed"
-}
+import { 
+  getActiveJobs, 
+  addApplication, 
+  getApplications,
+  type Job,
+  type Application 
+} from "@/lib/store"
 
 interface ApplicationFormData {
   fullName: string
@@ -58,27 +49,14 @@ interface ApplicationFormData {
   resumeFile: File | null
 }
 
-// Helper function to format date
-function formatPostedDate(dateString: string): string {
-  const posted = new Date(dateString)
-  const now = new Date()
-  const diffTime = Math.abs(now.getTime() - posted.getTime())
-  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24))
-  
-  if (diffDays === 0) return "Today"
-  if (diffDays === 1) return "1 day ago"
-  if (diffDays < 7) return `${diffDays} days ago`
-  if (diffDays < 14) return "1 week ago"
-  return `${Math.floor(diffDays / 7)} weeks ago`
-}
-
 export function JobsSection() {
   const [jobs, setJobs] = useState<Job[]>([])
+  const [applications, setApplications] = useState<Application[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [savedJobs, setSavedJobs] = useState<number[]>([])
-  const [appliedJobs, setAppliedJobs] = useState<number[]>([])
   const [applyDialogOpen, setApplyDialogOpen] = useState(false)
   const [selectedJob, setSelectedJob] = useState<Job | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [formData, setFormData] = useState<ApplicationFormData>({
     fullName: "",
     email: "",
@@ -88,81 +66,67 @@ export function JobsSection() {
     coverLetter: "",
     resumeFile: null,
   })
-  const [isSubmitting, setIsSubmitting] = useState(false)
 
-  // Load jobs from localStorage (posted by HR)
-  useEffect(() => {
-    const loadJobs = () => {
-      const storedJobs = localStorage.getItem("hireai_jobs")
-      if (storedJobs) {
-        const parsedJobs = JSON.parse(storedJobs)
-        // Transform HR-posted jobs to candidate job format, only show active jobs
-        const candidateJobs: Job[] = parsedJobs
-          .filter((job: { status: string }) => job.status === "active")
-          .map((job: {
-            id: number
-            title: string
-            department: string
-            location: string
-            type: string
-            salary: string
-            description: string
-            skills: string[]
-            isRemote: boolean
-            vacancies: number
-            postedAt: string
-            status: "active" | "paused" | "closed"
-          }) => ({
-            id: job.id,
-            title: job.title,
-            company: "HireAI Corp", // Default company name
-            department: job.department,
-            location: job.location,
-            type: job.type,
-            salary: job.salary,
-            posted: formatPostedDate(job.postedAt),
-            description: job.description,
-            skills: job.skills,
-            remote: job.isRemote,
-            vacancies: job.vacancies,
-            status: job.status
-          }))
-        setJobs(candidateJobs)
-      }
-    }
-
-    loadJobs()
-    // Listen for storage changes from HR dashboard
-    window.addEventListener("storage", loadJobs)
-    return () => window.removeEventListener("storage", loadJobs)
+  // Load jobs and applications from store
+  const loadData = useCallback(() => {
+    const storedJobs = getActiveJobs()
+    const storedApplications = getApplications()
+    setJobs(storedJobs)
+    setApplications(storedApplications)
   }, [])
 
-  // Load applied jobs from localStorage
   useEffect(() => {
-    const storedApplications = localStorage.getItem("hireai_applications")
-    if (storedApplications) {
-      const applications = JSON.parse(storedApplications)
-      const appliedJobIds = applications.map((app: { jobId: number }) => app.jobId)
-      setAppliedJobs(appliedJobIds)
+    loadData()
+
+    // Load saved jobs from localStorage
+    const storedSavedJobs = localStorage.getItem("hireai_saved_jobs")
+    if (storedSavedJobs) {
+      setSavedJobs(JSON.parse(storedSavedJobs))
     }
-  }, [])
+
+    // Pre-fill form with user data if available
+    const storedName = sessionStorage.getItem("userName")
+    const storedEmail = sessionStorage.getItem("userEmail")
+    if (storedName || storedEmail) {
+      setFormData(prev => ({
+        ...prev,
+        fullName: storedName || prev.fullName,
+        email: storedEmail || prev.email,
+      }))
+    }
+
+    // Listen for job updates from HR dashboard
+    const handleJobsUpdated = () => loadData()
+    window.addEventListener("jobs-updated", handleJobsUpdated)
+    window.addEventListener("applications-updated", handleJobsUpdated)
+    
+    return () => {
+      window.removeEventListener("jobs-updated", handleJobsUpdated)
+      window.removeEventListener("applications-updated", handleJobsUpdated)
+    }
+  }, [loadData])
+
+  // Get applied job IDs for current user
+  const userEmail = formData.email || sessionStorage.getItem("userEmail") || ""
+  const appliedJobIds = applications
+    .filter(app => app.candidateEmail === userEmail)
+    .map(app => app.jobId)
 
   const filteredJobs = jobs.filter(job => 
     job.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
     job.company.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    job.department.toLowerCase().includes(searchQuery.toLowerCase()) ||
     job.skills.some(skill => skill.toLowerCase().includes(searchQuery.toLowerCase()))
   )
 
   const toggleSave = (jobId: number) => {
-    setSavedJobs(prev => 
-      prev.includes(jobId) 
-        ? prev.filter(id => id !== jobId)
-        : [...prev, jobId]
-    )
+    const newSavedJobs = savedJobs.includes(jobId) 
+      ? savedJobs.filter(id => id !== jobId)
+      : [...savedJobs, jobId]
+    setSavedJobs(newSavedJobs)
+    localStorage.setItem("hireai_saved_jobs", JSON.stringify(newSavedJobs))
   }
 
-  const openApplyDialog = (job: typeof jobs[0]) => {
+  const openApplyDialog = (job: Job) => {
     setSelectedJob(job)
     setApplyDialogOpen(true)
   }
@@ -175,64 +139,49 @@ export function JobsSection() {
 
   const handleSubmitApplication = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (selectedJob) {
-      setIsSubmitting(true)
-      
-      // Get candidate info from session storage
-      const candidateName = sessionStorage.getItem("userName") || formData.fullName
-      const candidateEmail = sessionStorage.getItem("userEmail") || formData.email
-      
-      // Create application object
-      const application = {
-        id: Date.now(),
-        jobId: selectedJob.id,
-        jobTitle: selectedJob.title,
-        candidateName: candidateName,
-        candidateEmail: candidateEmail,
-        phone: formData.phone,
-        skills: formData.skills.split(",").map(s => s.trim()).filter(s => s),
-        experience: formData.experience,
-        coverLetter: formData.coverLetter,
-        appliedAt: new Date().toISOString().split('T')[0],
-        status: "new" as const,
-        resumeFileName: formData.resumeFile?.name || null
-      }
-      
-      // Save to localStorage
-      const existingApplications = localStorage.getItem("hireai_applications")
-      const applications = existingApplications ? JSON.parse(existingApplications) : []
-      applications.push(application)
-      localStorage.setItem("hireai_applications", JSON.stringify(applications))
-      
-      // Update job's applicant count in jobs storage
-      const storedJobs = localStorage.getItem("hireai_jobs")
-      if (storedJobs) {
-        const parsedJobs = JSON.parse(storedJobs)
-        const updatedJobs = parsedJobs.map((job: { id: number; applicants: number }) => 
-          job.id === selectedJob.id 
-            ? { ...job, applicants: (job.applicants || 0) + 1 }
-            : job
-        )
-        localStorage.setItem("hireai_jobs", JSON.stringify(updatedJobs))
-      }
-      
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      
-      setAppliedJobs(prev => [...prev, selectedJob.id])
-      setApplyDialogOpen(false)
-      setIsSubmitting(false)
-      setFormData({
-        fullName: "",
-        email: "",
-        phone: "",
-        skills: "",
-        experience: "",
-        coverLetter: "",
-        resumeFile: null,
-      })
-      setSelectedJob(null)
-    }
+    if (!selectedJob) return
+
+    setIsSubmitting(true)
+
+    // Parse skills from comma-separated string
+    const skillsArray = formData.skills
+      .split(',')
+      .map(s => s.trim())
+      .filter(s => s.length > 0)
+
+    // Add application to store
+    addApplication({
+      jobId: selectedJob.id,
+      candidateName: formData.fullName,
+      candidateEmail: formData.email,
+      candidatePhone: formData.phone,
+      skills: skillsArray,
+      experience: formData.experience,
+      coverLetter: formData.coverLetter,
+      resumeFileName: formData.resumeFile?.name || "",
+      resumeFileSize: formData.resumeFile?.size || 0,
+    })
+
+    // Simulate a brief delay for UX
+    await new Promise(resolve => setTimeout(resolve, 500))
+
+    setIsSubmitting(false)
+    setApplyDialogOpen(false)
+    
+    // Reset form but keep user info
+    setFormData({
+      fullName: formData.fullName,
+      email: formData.email,
+      phone: formData.phone,
+      skills: "",
+      experience: "",
+      coverLetter: "",
+      resumeFile: null,
+    })
+    setSelectedJob(null)
+    
+    // Reload data to update applied status
+    loadData()
   }
 
   return (
@@ -259,7 +208,7 @@ export function JobsSection() {
                 <Send className="h-6 w-6 text-chart-2" />
               </div>
               <div>
-                <p className="text-2xl font-bold text-foreground">{appliedJobs.length}</p>
+                <p className="text-2xl font-bold text-foreground">{appliedJobIds.length}</p>
                 <p className="text-sm text-muted-foreground">Applications Sent</p>
               </div>
             </div>
@@ -449,8 +398,8 @@ export function JobsSection() {
               </Button>
               <Button
                 type="submit"
-                className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90"
                 disabled={isSubmitting}
+                className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90"
               >
                 {isSubmitting ? (
                   <div className="h-5 w-5 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
@@ -468,22 +417,75 @@ export function JobsSection() {
 
       {/* Job Listings */}
       <div className="space-y-4">
-        {filteredJobs.map((job) => (
-          <Card key={job.id} className="bg-card border-border hover:border-primary/50 transition-colors">
-            <CardContent className="p-6">
-              <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
-                <div className="flex-1 space-y-4">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <h3 className="text-lg font-semibold text-foreground">{job.title}</h3>
-                      <div className="flex items-center gap-2 mt-1 text-muted-foreground">
-                        <Building2 className="h-4 w-4" />
-                        <span>{job.company}</span>
+        {filteredJobs.map((job) => {
+          const hasApplied = appliedJobIds.includes(job.id)
+          
+          return (
+            <Card key={job.id} className="bg-card border-border hover:border-primary/50 transition-colors">
+              <CardContent className="p-6">
+                <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+                  <div className="flex-1 space-y-4">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <h3 className="text-lg font-semibold text-foreground">{job.title}</h3>
+                        <div className="flex items-center gap-2 mt-1 text-muted-foreground">
+                          <Building2 className="h-4 w-4" />
+                          <span>{job.company}</span>
+                        </div>
                       </div>
+                      <button
+                        onClick={() => toggleSave(job.id)}
+                        className="lg:hidden p-2 hover:bg-secondary rounded-lg transition-colors"
+                      >
+                        {savedJobs.includes(job.id) ? (
+                          <BookmarkCheck className="h-5 w-5 text-primary" />
+                        ) : (
+                          <Bookmark className="h-5 w-5 text-muted-foreground" />
+                        )}
+                      </button>
                     </div>
+
+                    <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+                      <span className="flex items-center gap-1">
+                        <MapPin className="h-4 w-4" />
+                        {job.location}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <DollarSign className="h-4 w-4" />
+                        {job.salary}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Clock className="h-4 w-4" />
+                        Posted {job.postedAt}
+                      </span>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      <Badge variant="secondary" className="bg-secondary text-secondary-foreground">
+                        {job.type}
+                      </Badge>
+                      {job.isRemote && (
+                        <Badge className="bg-primary/10 text-primary border-0">
+                          Remote
+                        </Badge>
+                      )}
+                      {job.skills.slice(0, 3).map((skill) => (
+                        <Badge key={skill} variant="outline" className="border-border text-muted-foreground">
+                          {skill}
+                        </Badge>
+                      ))}
+                      {job.skills.length > 3 && (
+                        <Badge variant="outline" className="border-border text-muted-foreground">
+                          +{job.skills.length - 3} more
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex lg:flex-col items-center gap-2 lg:items-end">
                     <button
                       onClick={() => toggleSave(job.id)}
-                      className="lg:hidden p-2 hover:bg-secondary rounded-lg transition-colors"
+                      className="hidden lg:flex p-2 hover:bg-secondary rounded-lg transition-colors"
                     >
                       {savedJobs.includes(job.id) ? (
                         <BookmarkCheck className="h-5 w-5 text-primary" />
@@ -491,175 +493,117 @@ export function JobsSection() {
                         <Bookmark className="h-5 w-5 text-muted-foreground" />
                       )}
                     </button>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-                    <span className="flex items-center gap-1">
-                      <MapPin className="h-4 w-4" />
-                      {job.location}
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <DollarSign className="h-4 w-4" />
-                      {job.salary}
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Clock className="h-4 w-4" />
-                      {job.posted}
-                    </span>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    <Badge variant="secondary" className="bg-secondary text-secondary-foreground">
-                      {job.type}
-                    </Badge>
-                    {job.remote && (
-                      <Badge className="bg-primary/10 text-primary border-0">
-                        Remote
-                      </Badge>
-                    )}
-                    {job.skills.slice(0, 3).map((skill) => (
-                      <Badge key={skill} variant="outline" className="border-border text-muted-foreground">
-                        {skill}
-                      </Badge>
-                    ))}
-                    {job.skills.length > 3 && (
-                      <Badge variant="outline" className="border-border text-muted-foreground">
-                        +{job.skills.length - 3} more
-                      </Badge>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex lg:flex-col items-center gap-2 lg:items-end">
-                  <button
-                    onClick={() => toggleSave(job.id)}
-                    className="hidden lg:flex p-2 hover:bg-secondary rounded-lg transition-colors"
-                  >
-                    {savedJobs.includes(job.id) ? (
-                      <BookmarkCheck className="h-5 w-5 text-primary" />
-                    ) : (
-                      <Bookmark className="h-5 w-5 text-muted-foreground" />
-                    )}
-                  </button>
-                  
-                  <Dialog>
-                    <DialogTrigger asChild>
-                      <Button variant="outline" size="sm" className="border-border text-muted-foreground hover:text-foreground hover:bg-secondary">
-                        <ExternalLink className="h-4 w-4 mr-2" />
-                        View Details
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent className="bg-card border-border max-w-2xl">
-                      <DialogHeader>
-                        <DialogTitle className="text-foreground text-xl">{job.title}</DialogTitle>
-                        <DialogDescription className="text-muted-foreground">
-                          {job.company} - {job.location}
-                        </DialogDescription>
-                      </DialogHeader>
-                      <div className="space-y-4 pt-4">
-                        <div className="flex flex-wrap gap-2">
-                          <Badge variant="secondary" className="bg-secondary text-secondary-foreground">{job.type}</Badge>
-                          {job.remote && <Badge className="bg-primary/10 text-primary border-0">Remote</Badge>}
-                        </div>
-                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                          <span className="flex items-center gap-1">
-                            <DollarSign className="h-4 w-4" />
-                            {job.salary}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <Clock className="h-4 w-4" />
-                            Posted {job.posted}
-                          </span>
-                        </div>
-                        <div>
-                          <h4 className="font-semibold text-foreground mb-2">Description</h4>
-                          <p className="text-muted-foreground">{job.description}</p>
-                        </div>
-                        <div>
-                          <h4 className="font-semibold text-foreground mb-2">Required Skills</h4>
+                    
+                    <Dialog>
+                      <DialogTrigger asChild>
+                        <Button variant="outline" size="sm" className="border-border text-muted-foreground hover:text-foreground hover:bg-secondary">
+                          <ExternalLink className="h-4 w-4 mr-2" />
+                          View Details
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="bg-card border-border max-w-2xl">
+                        <DialogHeader>
+                          <DialogTitle className="text-foreground text-xl">{job.title}</DialogTitle>
+                          <DialogDescription className="text-muted-foreground">
+                            {job.company} - {job.location}
+                          </DialogDescription>
+                        </DialogHeader>
+                        <div className="space-y-4 pt-4">
                           <div className="flex flex-wrap gap-2">
-                            {job.skills.map((skill) => (
-                              <Badge key={skill} variant="outline" className="border-border text-muted-foreground">
-                                {skill}
-                              </Badge>
-                            ))}
+                            <Badge variant="secondary" className="bg-secondary text-secondary-foreground">{job.type}</Badge>
+                            {job.isRemote && <Badge className="bg-primary/10 text-primary border-0">Remote</Badge>}
+                            <Badge variant="outline" className="border-border text-muted-foreground">
+                              {job.vacancies} {job.vacancies === 1 ? 'vacancy' : 'vacancies'}
+                            </Badge>
+                          </div>
+                          <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                            <span className="flex items-center gap-1">
+                              <DollarSign className="h-4 w-4" />
+                              {job.salary}
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <Clock className="h-4 w-4" />
+                              Posted {job.postedAt}
+                            </span>
+                          </div>
+                          <div>
+                            <h4 className="font-semibold text-foreground mb-2">Description</h4>
+                            <p className="text-muted-foreground">{job.description}</p>
+                          </div>
+                          <div>
+                            <h4 className="font-semibold text-foreground mb-2">Required Skills</h4>
+                            <div className="flex flex-wrap gap-2">
+                              {job.skills.map((skill) => (
+                                <Badge key={skill} variant="outline" className="border-border text-muted-foreground">
+                                  {skill}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="flex gap-3 pt-4">
+                            <Button 
+                              className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90"
+                              onClick={() => {
+                                if (!hasApplied) {
+                                  openApplyDialog(job)
+                                }
+                              }}
+                              disabled={hasApplied}
+                            >
+                              {hasApplied ? (
+                                <>
+                                  <CheckCircle2 className="h-4 w-4 mr-2" />
+                                  Applied
+                                </>
+                              ) : (
+                                "Apply Now"
+                              )}
+                            </Button>
+                            <Button
+                              variant="outline"
+                              className="border-border text-foreground hover:bg-secondary"
+                              onClick={() => toggleSave(job.id)}
+                            >
+                              {savedJobs.includes(job.id) ? (
+                                <BookmarkCheck className="h-4 w-4" />
+                              ) : (
+                                <Bookmark className="h-4 w-4" />
+                              )}
+                            </Button>
                           </div>
                         </div>
-                        <div className="flex gap-3 pt-4">
-                          <Button 
-                            className={appliedJobs.includes(job.id) 
-                              ? "flex-1 bg-chart-2/10 text-chart-2 hover:bg-chart-2/20" 
-                              : "flex-1 bg-primary text-primary-foreground hover:bg-primary/90"
-                            }
-                            onClick={() => {
-                              if (!appliedJobs.includes(job.id)) {
-                                openApplyDialog(job)
-                              }
-                            }}
-                            disabled={appliedJobs.includes(job.id)}
-                          >
-                            {appliedJobs.includes(job.id) ? (
-                              <>
-                                <CheckCircle2 className="h-4 w-4 mr-2" />
-                                Applied
-                              </>
-                            ) : "Apply Now"}
-                          </Button>
-                          <Button
-                            variant="outline"
-                            className="border-border text-foreground hover:bg-secondary"
-                            onClick={() => toggleSave(job.id)}
-                          >
-                            {savedJobs.includes(job.id) ? (
-                              <BookmarkCheck className="h-4 w-4" />
-                            ) : (
-                              <Bookmark className="h-4 w-4" />
-                            )}
-                          </Button>
-                        </div>
-                      </div>
-                    </DialogContent>
-                  </Dialog>
+                      </DialogContent>
+                    </Dialog>
 
-                  <Button 
-                    className={appliedJobs.includes(job.id) 
-                      ? "bg-chart-2/10 text-chart-2 hover:bg-chart-2/20" 
-                      : "bg-primary text-primary-foreground hover:bg-primary/90"
-                    }
-                    size="sm"
-                    onClick={() => !appliedJobs.includes(job.id) && openApplyDialog(job)}
-                    disabled={appliedJobs.includes(job.id)}
-                  >
-                    {appliedJobs.includes(job.id) ? (
-                      <>
-                        <CheckCircle2 className="h-4 w-4 mr-1" />
-                        Applied
-                      </>
-                    ) : "Quick Apply"}
-                  </Button>
+                    <Button 
+                      className="bg-primary text-primary-foreground hover:bg-primary/90"
+                      size="sm"
+                      onClick={() => openApplyDialog(job)}
+                      disabled={hasApplied}
+                    >
+                      {hasApplied ? (
+                        <>
+                          <CheckCircle2 className="h-4 w-4 mr-2" />
+                          Applied
+                        </>
+                      ) : (
+                        "Quick Apply"
+                      )}
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+              </CardContent>
+            </Card>
+          )
+        })}
       </div>
 
-      {filteredJobs.length === 0 && jobs.length > 0 && (
+      {filteredJobs.length === 0 && (
         <Card className="bg-card border-border">
           <CardContent className="p-12 text-center">
             <Briefcase className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
             <h3 className="text-lg font-semibold text-foreground">No jobs found</h3>
             <p className="text-muted-foreground mt-1">Try adjusting your search criteria</p>
-          </CardContent>
-        </Card>
-      )}
-
-      {jobs.length === 0 && (
-        <Card className="bg-card border-border">
-          <CardContent className="p-12 text-center">
-            <Briefcase className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-foreground">No jobs available yet</h3>
-            <p className="text-muted-foreground mt-1">Check back later for new job postings from HR</p>
           </CardContent>
         </Card>
       )}
